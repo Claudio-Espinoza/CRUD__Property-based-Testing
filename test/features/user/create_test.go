@@ -13,6 +13,10 @@ import (
 	"property-based/test/helpers"
 )
 
+// TestProperty_UserCreate_ValidData_SucceedsAndIsRetrievable
+// Invariante: Usuario creado debe persistir con ID único y timestamps válidos
+// Relación: GetUser(created.ID) == created
+// Bordes: Nombres de 2 caracteres, edad 1, emails únicos con timestamp
 func TestProperty_UserCreate_ValidData_SucceedsAndIsRetrievable(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -52,6 +56,10 @@ func TestProperty_UserCreate_ValidData_SucceedsAndIsRetrievable(t *testing.T) {
 	})
 }
 
+// TestProperty_UserCreate_InvalidData_FailsWithoutPersisting
+// Invariante: Sistema vacío (count=0) debe mantenerse tras fallo
+// Relación: error != nil ⟹ created == nil ∧ CountUsers() == 0
+// Bordes: Nombre vacío/"", edad 0/-1/151, email sin @/dominio
 func TestProperty_UserCreate_InvalidData_FailsWithoutPersisting(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -78,6 +86,10 @@ func TestProperty_UserCreate_InvalidData_FailsWithoutPersisting(t *testing.T) {
 	})
 }
 
+// TestProperty_UserCreate_DuplicateEmail_Fails
+// Invariante: Email único en sistema (no duplicados)
+// Relación: CreateUser(_, email_existente, _) ⟹ ErrAlreadyExists
+// Bordes: Email con/sin espacios, mayúsculas/minúsculas (normalización)
 func TestProperty_UserCreate_DuplicateEmail_Fails(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -104,8 +116,9 @@ func TestProperty_UserCreate_DuplicateEmail_Fails(t *testing.T) {
 }
 
 // TestProperty_UserCreate_ConcurrentCreates_AllSucceedWithUniqueIDs
-//
-// IMPORTANTE: Los datos se generan ANTES de las goroutines
+// Invariante: IDs únicos globalmente, no hay colisiones
+// Relación: ∀i,j: i≠j ⟹ users[i].ID ≠ users[j].ID
+// Bordes: 2-10 goroutines creando simultáneamente, emails únicos con timestamp
 func TestProperty_UserCreate_ConcurrentCreates_AllSucceedWithUniqueIDs(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -113,7 +126,6 @@ func TestProperty_UserCreate_ConcurrentCreates_AllSucceedWithUniqueIDs(t *testin
 
 		userCount := rapid.IntRange(2, 10).Draw(rt, "user_count")
 
-		// ✅ GENERAR TODOS LOS DATOS **ANTES** DE LAS GOROUTINES
 		usersData := make([]generators.ValidUserData, userCount)
 		for i := 0; i < userCount; i++ {
 			usersData[i] = generators.ValidUserStruct().Draw(rt, "user")
@@ -126,23 +138,20 @@ func TestProperty_UserCreate_ConcurrentCreates_AllSucceedWithUniqueIDs(t *testin
 		results := make(chan result, userCount)
 		var wg sync.WaitGroup
 
-		// Crear usuarios concurrentemente usando los datos ya generados
 		for i := 0; i < userCount; i++ {
 			wg.Add(1)
 			go func(userData generators.ValidUserData) {
 				defer wg.Done()
 				user, err := svc.CreateUser(userData.Name, userData.Email, userData.Age)
 				results <- result{user: user, err: err}
-			}(usersData[i]) // Pasar los datos como parámetro
+			}(usersData[i])
 		}
 
-		// Esperar a que todas las goroutines terminen
 		go func() {
 			wg.Wait()
 			close(results)
 		}()
 
-		// Verificar resultados
 		createdIDs := make(map[string]bool)
 		successCount := 0
 

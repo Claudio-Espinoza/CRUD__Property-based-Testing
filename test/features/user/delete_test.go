@@ -12,6 +12,10 @@ import (
 	"property-based/test/helpers"
 )
 
+// TestProperty_UserDelete_ExistingUser_RemovesFromSystem
+// Invariante: GetUser(id) ⟹ ErrNotFound después de Delete(id)
+// Relación: Delete(id) ∧ GetUser(id) == ErrNotFound ∧ CountUsers() decrece en 1
+// Bordes: Eliminar único usuario, eliminar de N usuarios
 func TestProperty_UserDelete_ExistingUser_RemovesFromSystem(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -35,6 +39,10 @@ func TestProperty_UserDelete_ExistingUser_RemovesFromSystem(t *testing.T) {
 	})
 }
 
+// TestProperty_UserDelete_NonExistentUser_ReturnsNotFound
+// Invariante: Delete(id_inexistente) ⟹ ErrNotFound
+// Relación: ¬∃user: user.ID == id ⟹ Delete(id) == ErrNotFound
+// Bordes: UUID válido inexistente, después de Delete previo
 func TestProperty_UserDelete_NonExistentUser_ReturnsNotFound(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -49,6 +57,10 @@ func TestProperty_UserDelete_NonExistentUser_ReturnsNotFound(t *testing.T) {
 	})
 }
 
+// TestProperty_UserDelete_Idempotence_SecondDeleteFails
+// Invariante: Delete(id) ∧ Delete(id) ⟹ segunda operación falla con ErrNotFound
+// Relación: Operación NO idempotente (primera ok, segunda error)
+// Bordes: Eliminar dos veces consecutivas
 func TestProperty_UserDelete_Idempotence_SecondDeleteFails(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -66,6 +78,10 @@ func TestProperty_UserDelete_Idempotence_SecondDeleteFails(t *testing.T) {
 	})
 }
 
+// TestProperty_UserDelete_FreesEmail_AllowsReuse
+// Invariante: Email liberado tras Delete permite CreateUser con mismo email
+// Relación: Delete(user) ⟹ CreateUser(_, user.Email, _) == success
+// Bordes: Reutilizar email inmediatamente, crear con datos diferentes
 func TestProperty_UserDelete_FreesEmail_AllowsReuse(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -90,6 +106,10 @@ func TestProperty_UserDelete_FreesEmail_AllowsReuse(t *testing.T) {
 	})
 }
 
+// TestProperty_UserDelete_MultipleUsers_OnlyDeletesSpecified
+// Invariante: Delete(id) solo elimina ese usuario, los demás persisten
+// Relación: ∀user: user.ID ≠ deleted_id ⟹ GetUser(user.ID) == success
+// Bordes: Eliminar de 2-5 usuarios, verificar resto intacto
 func TestProperty_UserDelete_MultipleUsers_OnlyDeletesSpecified(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -113,11 +133,9 @@ func TestProperty_UserDelete_MultipleUsers_OnlyDeletesSpecified(t *testing.T) {
 
 		for i, user := range createdUsers {
 			if i == deleteIndex {
-				// Este debe estar eliminado
 				_, err := svc.GetUser(user.ID)
 				helpers.AssertErrorIs(t, err, domain.ErrNotFound, "Deleted user not found")
 			} else {
-				// Estos deben seguir existiendo
 				retrieved, err := svc.GetUser(user.ID)
 				helpers.AssertNoError(t, err, "Other user still exists")
 				helpers.AssertUserEquals(t, user, retrieved, "Other user unchanged")
@@ -130,6 +148,10 @@ func TestProperty_UserDelete_MultipleUsers_OnlyDeletesSpecified(t *testing.T) {
 	})
 }
 
+// TestProperty_UserDelete_ConcurrentDeletes_OneSucceedsOthersFail
+// Invariante: Solo una goroutine puede eliminar exitosamente un usuario
+// Relación: Delete(id) concurrente ⟹ 1 success ∧ (N-1) ErrNotFound
+// Bordes: 2-5 goroutines intentando eliminar el mismo usuario
 func TestProperty_UserDelete_ConcurrentDeletes_OneSucceedsOthersFail(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -173,6 +195,10 @@ func TestProperty_UserDelete_ConcurrentDeletes_OneSucceedsOthersFail(t *testing.
 	})
 }
 
+// TestProperty_UserDelete_DeleteAll_EmptiesSystem
+// Invariante: Eliminar todos los usuarios ⟹ CountUsers() == 0 ∧ GetAll() == []
+// Relación: ∀user ∈ system: Delete(user.ID) ⟹ sistema vacío
+// Bordes: Eliminar 0 usuarios (vacío), 1 usuario, N usuarios (2-5)
 func TestProperty_UserDelete_DeleteAll_EmptiesSystem(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()

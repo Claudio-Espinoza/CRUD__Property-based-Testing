@@ -13,14 +13,9 @@ import (
 )
 
 // TestProperty_UserRead_ExistingUser_ReturnsCorrectData
-//
-// PROPIEDAD MATEMÁTICA:
-//
-//	∀ user creado, GetUser(user.ID) = user
-//
-// INVARIANTES:
-//  1. Datos devueltos coinciden exactamente con los creados
-//  2. La operación es idempotente: múltiples lecturas devuelven lo mismo
+// Invariante: GetUser(id) siempre retorna los mismos datos para el mismo id
+// Relación: GetUser(created.ID) == created (identidad)
+// Bordes: ID vacío, ID inexistente, usuario recién creado
 func TestProperty_UserRead_ExistingUser_ReturnsCorrectData(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -45,10 +40,9 @@ func TestProperty_UserRead_ExistingUser_ReturnsCorrectData(t *testing.T) {
 }
 
 // TestProperty_UserRead_NonExistentUser_ReturnsNotFound
-//
-// PROPIEDAD MATEMÁTICA:
-//
-//	∀ id ∉ Sistema, GetUser(id) = (nil, ErrNotFound)
+// Invariante: GetUser(id_inexistente) ⟹ ErrNotFound
+// Relación: ¬∃user: user.ID == id ⟹ GetUser(id) == ErrNotFound
+// Bordes: UUID válido pero inexistente, string vacío, UUID malformado
 func TestProperty_UserRead_NonExistentUser_ReturnsNotFound(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -69,10 +63,9 @@ func TestProperty_UserRead_NonExistentUser_ReturnsNotFound(t *testing.T) {
 }
 
 // TestProperty_UserRead_ByEmail_FindsCorrectUser
-//
-// PROPIEDAD MATEMÁTICA:
-//
-//	∀ user creado, GetUserByEmail(user.Email) = user
+// Invariante: GetByEmail retorna el usuario cuyo email coincide (case-insensitive)
+// Relación: GetByEmail(user.Email) == user
+// Bordes: Email con mayúsculas/minúsculas, espacios al inicio/final
 func TestProperty_UserRead_ByEmail_FindsCorrectUser(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -90,11 +83,9 @@ func TestProperty_UserRead_ByEmail_FindsCorrectUser(t *testing.T) {
 }
 
 // TestProperty_UserRead_GetAll_ReturnsAllCreatedUsers
-//
-// PROPIEDAD MATEMÁTICA:
-//
-//	∀ conjunto de users U creados,
-//	  |GetAllUsers()| = |U| ∧ ∀u ∈ U, u ∈ GetAllUsers()
+// Invariante: len(GetAll()) == CountUsers()
+// Relación: ∀user ∈ created_users: user ∈ GetAll()
+// Bordes: Sistema vacío (0 usuarios), 1 usuario, N usuarios (2-10)
 func TestProperty_UserRead_GetAll_ReturnsAllCreatedUsers(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
@@ -103,7 +94,6 @@ func TestProperty_UserRead_GetAll_ReturnsAllCreatedUsers(t *testing.T) {
 		userCount := rapid.IntRange(1, 10).Draw(t, "user_count")
 		createdUsers := make(map[string]*domain.User)
 
-		// Crear múltiples usuarios
 		for i := 0; i < userCount; i++ {
 			userData := generators.ValidUserStruct().Draw(t, "user")
 			created, err := svc.CreateUser(userData.Name, userData.Email, userData.Age)
@@ -111,16 +101,13 @@ func TestProperty_UserRead_GetAll_ReturnsAllCreatedUsers(t *testing.T) {
 			createdUsers[created.ID] = created
 		}
 
-		// Obtener todos
 		allUsers, err := svc.GetAllUsers()
 		helpers.AssertNoError(t, err, "GetAllUsers")
 
-		// Verificar cantidad
 		if len(allUsers) != userCount {
 			t.Fatalf("Expected %d users, got %d", userCount, len(allUsers))
 		}
 
-		// Verificar que todos los creados están en la lista
 		for _, user := range allUsers {
 			originalUser, exists := createdUsers[user.ID]
 			if !exists {
@@ -132,11 +119,9 @@ func TestProperty_UserRead_GetAll_ReturnsAllCreatedUsers(t *testing.T) {
 }
 
 // TestProperty_UserRead_ConcurrentReads_AreConsistent
-//
-// PROPIEDAD MATEMÁTICA:
-//
-//	∀ user, ∀ lecturas concurrentes,
-//	  Todas las lecturas devuelven datos idénticos
+// Invariante: Lecturas concurrentes retornan los mismos datos
+// Relación: ∀i,j: GetUser(id)[i] == GetUser(id)[j] (consistencia)
+// Bordes: 5-15 goroutines leyendo simultáneamente el mismo usuario
 func TestProperty_UserRead_ConcurrentReads_AreConsistent(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		repo := repository.NewInMemoryUserRepository()
